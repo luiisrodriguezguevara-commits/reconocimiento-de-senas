@@ -48,12 +48,14 @@ export const useMediaPipe = ({
         window.drawConnectors(ctx, landmarks, HAND_CONNECTIONS, { color: '#00FF00', lineWidth: 5 });
         window.drawLandmarks(ctx, landmarks, { color: '#FF0000', lineWidth: 2 });
 
-        // ✅ Llamamos por separado (sin else if)
+        // ✅ Convertir objetos {x,y,z} → arrays [x,y,z]
+        const puntos = landmarks.map(p => [p.x, p.y, p.z]);
+
         if (isCollecting && currentVowel && onLandmarks) {
-          onLandmarks(landmarks, currentVowel);
+          onLandmarks(puntos, currentVowel);
         }
         if (isModelTrained && isPredicting && onPredict) {
-          onPredict(landmarks);
+          onPredict(puntos);
         }
       }
     }

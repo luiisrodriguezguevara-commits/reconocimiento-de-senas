@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
-// ✅ Configurar URL del backend (local vs producción)
+// ✅ Configurar URL del backend
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 const VOWELS = ["A", "E", "I", "O", "U"];
@@ -12,7 +12,7 @@ const STATUS_MESSAGES = {
   COLLECTING: (v) => `Recolectando muestras para la vocal '${v}'.`,
   TRAINING: "Entrenando modelo... Esto puede tomar unos minutos.",
   TRAINING_SUCCESS: (acc) =>
-    `Entrenamiento completado! Precisión: ${acc.toFixed(2)}%`,
+    `Entrenamiento completado ✅ Precisión: ${(acc * 100).toFixed(2)}%`,
   TRAINING_ERROR:
     "Error al entrenar el modelo. Asegúrate de tener al menos 2 muestras por vocal.",
   TRAINING_ERROR_INSUFFICIENT:
@@ -58,7 +58,6 @@ export const useVocalLogic = ({ setModalData }) => {
             ? STATUS_MESSAGES.READY_TO_TRAIN
             : prev.statusMessage;
 
-        // Normalizar la estructura de datos
         const normalizedVowelProgress = {};
         Object.keys(progressData.vocales).forEach((vowel) => {
           normalizedVowelProgress[vowel] = {
@@ -128,21 +127,11 @@ export const useVocalLogic = ({ setModalData }) => {
         });
         const result = await res.json();
 
-        setAppState((prev) => {
-          const confidenceChanged =
-            Math.abs((prev.predictionConfidence || 0) - result.confianza) > 0.05;
-          const predictionChanged = prev.prediction !== result.prediccion;
-
-          if (predictionChanged || confidenceChanged) {
-            return {
-              ...prev,
-              prediction: result.prediccion,
-              predictionConfidence: result.confianza,
-            };
-          }
-
-          return prev;
-        });
+        setAppState((prev) => ({
+          ...prev,
+          prediction: result.prediccion,
+          predictionConfidence: result.confianza,
+        }));
       } catch (error) {
         console.error("Error en la predicción:", error);
         setAppState((prev) => ({
@@ -214,7 +203,7 @@ export const useVocalLogic = ({ setModalData }) => {
         ...prev,
         isModelTrained: true,
         trainingAccuracy: result.precision,
-        statusMessage: STATUS_MESSAGES.TRAINING_SUCCESS(result.precision * 100),
+        statusMessage: STATUS_MESSAGES.TRAINING_SUCCESS(result.precision),
       }));
     } catch (err) {
       console.error("Error durante el entrenamiento:", err);

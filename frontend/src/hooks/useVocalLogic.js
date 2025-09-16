@@ -86,21 +86,33 @@ export const useVocalLogic = ({ setModalData }) => {
   }, []);
 
   const handleLandmarks = useCallback(
-    async (landmarks, vowel) => {
-      if (!appState.isCollecting) return;
-      try {
-        await fetch(`${API_URL}/api/samples`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ vocal: vowel, puntos_clave: landmarks }),
-        });
-        await fetchProgress();
-      } catch (error) {
-        console.error("Error al agregar muestra:", error);
+  async (landmarks, vowel) => {
+    if (!appState.isCollecting) return;
+    try {
+      // 👀 Mostrar payload en consola antes de enviarlo
+      console.log("Payload enviado a backend:", {
+        vocal: vowel,
+        puntos_clave: landmarks
+      });
+
+      const res = await fetch(`${API_URL}/api/samples`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vocal: vowel, puntos_clave: landmarks }),
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error("❌ Error en respuesta backend:", res.status, errorText);
       }
-    },
-    [appState.isCollecting, fetchProgress]
-  );
+
+      await fetchProgress();
+    } catch (error) {
+      console.error("Error al agregar muestra:", error);
+    }
+  },
+  [appState.isCollecting, fetchProgress]
+);
 
   // Throttling para predicciones
   const lastPredictionTime = useRef(0);

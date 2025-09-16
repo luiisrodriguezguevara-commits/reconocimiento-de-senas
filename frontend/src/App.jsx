@@ -1,12 +1,15 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState } from "react";
 
-import { useMediaPipe } from './hooks/useMediaPipe.js';
-import { useVocalLogic } from './hooks/useVocalLogic.js';
-import CameraSection from './components/CameraSection.jsx';
-import ControlsSection from './components/ControlsSection.jsx';
-import StatusMessage from './components/StatusMessage.jsx';
-import ConfirmModal from './components/ConfirmModal.jsx';
-import LeftBox from './components/LeftBox.jsx'; // 👈 nuevo componente
+// Hooks personalizados
+import { useMediaPipe } from "./hooks/useMediaPipe.js";
+import { useVocalLogic } from "./hooks/useVocalLogic.js";
+
+// Componentes
+import CameraSection from "./components/CameraSection.jsx";
+import ControlsSection from "./components/ControlsSection.jsx";
+import StatusMessage from "./components/StatusMessage.jsx";
+import ConfirmModal from "./components/ConfirmModal.jsx";
+import LeftBox from "./components/LeftBox.jsx"; // 👈 nuevo componente
 
 function App() {
   const videoRef = useRef(null);
@@ -16,10 +19,10 @@ function App() {
   const [modalData, setModalData] = useState({
     open: false,
     message: "",
-    onConfirm: null
+    onConfirm: null,
   });
 
-  // Estado y lógica de la app
+  // Estado y lógica de la app (conectado al backend Hugging Face)
   const {
     appState,
     handleLandmarks,
@@ -34,7 +37,7 @@ function App() {
     getTotalSamples,
     getRequiredSamples,
     VOWELS,
-    SAMPLES_PER_VOWEL
+    SAMPLES_PER_VOWEL,
   } = useVocalLogic({ setModalData });
 
   // Hook de MediaPipe
@@ -52,15 +55,15 @@ function App() {
   return (
     <div className="app-container">
       <header className="app-header">
-        <h1>Reconocimiento de Vocales por Gestos</h1>
+        <h1>Reconocimiento de Vocales por Gestos ✋</h1>
         <p>
-          Usa la cámara para capturar la posición de tu mano, recolectar muestras
-          y entrenar un modelo de IA para identificar vocales.
+          Usa la cámara para capturar la posición de tu mano, recolectar
+          muestras y entrenar un modelo de IA para identificar vocales.
         </p>
       </header>
 
       <main className="app-main">
-        {/* Cuadro largo a la izquierda */}
+        {/* Cuadro lateral a la izquierda */}
         <LeftBox />
 
         {/* Contenido principal */}

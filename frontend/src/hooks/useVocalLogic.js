@@ -1,21 +1,28 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { apiService } from '../services/api.js';
+import { useState, useEffect, useCallback, useRef } from "react";
 
-const VOWELS = ['A', 'E', 'I', 'O', 'U'];
+// ✅ Configurar URL del backend (local vs producción)
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
+const VOWELS = ["A", "E", "I", "O", "U"];
 const SAMPLES_PER_VOWEL = 100;
 
 // Mensajes de estado centralizados
 const STATUS_MESSAGES = {
-  IDLE: 'Inactivo. Selecciona una vocal para empezar a recolectar.',
+  IDLE: "Inactivo. Selecciona una vocal para empezar a recolectar.",
   COLLECTING: (v) => `Recolectando muestras para la vocal '${v}'.`,
-  TRAINING: 'Entrenando modelo... Esto puede tomar unos minutos.',
-  TRAINING_SUCCESS: (acc) => `Entrenamiento completado! Precisión: ${acc}%`,
-  TRAINING_ERROR: 'Error al entrenar el modelo. Asegúrate de tener al menos 2 muestras por vocal.',
-  TRAINING_ERROR_INSUFFICIENT: 'No hay suficientes datos para entrenar. Recolecta al menos 2 muestras para cada vocal.',
-  RESET: 'Datos reiniciados correctamente.',
-  READY_TO_TRAIN: 'Recolección completa. Listo para entrenar el modelo.',
-  PREDICTION_ERROR: 'Error en la predicción. Asegúrate de que el modelo esté entrenado.',
-  PREDICTION_ERROR_NO_MODEL: 'No hay modelo entrenado. Por favor, entrena el modelo primero.',
+  TRAINING: "Entrenando modelo... Esto puede tomar unos minutos.",
+  TRAINING_SUCCESS: (acc) =>
+    `Entrenamiento completado! Precisión: ${acc.toFixed(2)}%`,
+  TRAINING_ERROR:
+    "Error al entrenar el modelo. Asegúrate de tener al menos 2 muestras por vocal.",
+  TRAINING_ERROR_INSUFFICIENT:
+    "No hay suficientes datos para entrenar. Recolecta al menos 2 muestras para cada vocal.",
+  RESET: "Datos reiniciados correctamente.",
+  READY_TO_TRAIN: "Recolección completa. Listo para entrenar el modelo.",
+  PREDICTION_ERROR:
+    "Error en la predicción. Asegúrate de que el modelo esté entrenado.",
+  PREDICTION_ERROR_NO_MODEL:
+    "No hay modelo entrenado. Por favor, entrena el modelo primero.",
 };
 
 export const useVocalLogic = ({ setModalData }) => {
@@ -25,7 +32,7 @@ export const useVocalLogic = ({ setModalData }) => {
     isModelTrained: false,
     isPredicting: false,
     currentVowel: null,
-    prediction: '',
+    prediction: "",
     predictionConfidence: null,
     trainingAccuracy: null,
     statusMessage: STATUS_MESSAGES.IDLE,
@@ -35,21 +42,29 @@ export const useVocalLogic = ({ setModalData }) => {
   // --- Funciones de comunicación con el backend ---
   const fetchProgress = useCallback(async () => {
     try {
-      const progressData = await apiService.getProgress();
-      setAppState(prev => {
-        const totalSamples = VOWELS.reduce((sum, v) => sum + (progressData.vocales[v]?.cantidad || 0), 0);
+      const res = await fetch(`${API_URL}/api/progress`);
+      const progressData = await res.json();
+
+      setAppState((prev) => {
+        const totalSamples = VOWELS.reduce(
+          (sum, v) => sum + (progressData.vocales[v]?.cantidad || 0),
+          0
+        );
         const totalRequired = VOWELS.length * SAMPLES_PER_VOWEL;
         const totalProgress = (totalSamples / totalRequired) * 100;
 
-        const newStatusMessage = totalProgress >= 100 ? STATUS_MESSAGES.READY_TO_TRAIN : prev.statusMessage;
+        const newStatusMessage =
+          totalProgress >= 100
+            ? STATUS_MESSAGES.READY_TO_TRAIN
+            : prev.statusMessage;
 
         // Normalizar la estructura de datos
         const normalizedVowelProgress = {};
-        Object.keys(progressData.vocales).forEach(vowel => {
+        Object.keys(progressData.vocales).forEach((vowel) => {
           normalizedVowelProgress[vowel] = {
             count: progressData.vocales[vowel].cantidad,
             max: progressData.vocales[vowel].max,
-            percentage: progressData.vocales[vowel].porcentaje
+            percentage: progressData.vocales[vowel].porcentaje,
           };
         });
 
@@ -57,101 +72,118 @@ export const useVocalLogic = ({ setModalData }) => {
           ...prev,
           vowelProgress: {
             ...normalizedVowelProgress,
-            total: { samples: totalSamples, max: totalRequired, percentage: totalProgress }
+            total: {
+              samples: totalSamples,
+              max: totalRequired,
+              percentage: totalProgress,
+            },
           },
-          statusMessage: newStatusMessage
+          statusMessage: newStatusMessage,
         };
       });
     } catch (error) {
-      console.error('Error al obtener el progreso:', error);
+      console.error("Error al obtener el progreso:", error);
     }
   }, []);
 
-  const handleLandmarks = useCallback(async (landmarks, vowel) => {
-    if (!appState.isCollecting) return;
-    try {
-      await apiService.sendLandmarks(landmarks, vowel);
-      await fetchProgress();
-    } catch (error) {
-      console.error('Error al agregar muestra:', error);
-    }
-  }, [appState.isCollecting, fetchProgress]);
+  const handleLandmarks = useCallback(
+    async (landmarks, vowel) => {
+      if (!appState.isCollecting) return;
+      try {
+        await fetch(`${API_URL}/api/samples`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ vocal: vowel, puntos_clave: landmarks }),
+        });
+        await fetchProgress();
+      } catch (error) {
+        console.error("Error al agregar muestra:", error);
+      }
+    },
+    [appState.isCollecting, fetchProgress]
+  );
 
   // Throttling para predicciones
   const lastPredictionTime = useRef(0);
   const predictionInProgress = useRef(false);
   const PREDICTION_THROTTLE_MS = 200;
 
-  const handlePredict = useCallback(async (landmarks) => {
-    if (!appState.isPredicting || predictionInProgress.current) return;
+  const handlePredict = useCallback(
+    async (landmarks) => {
+      if (!appState.isPredicting || predictionInProgress.current) return;
 
-    const now = Date.now();
-    if (now - lastPredictionTime.current < PREDICTION_THROTTLE_MS) {
-      return;
-    }
-
-    predictionInProgress.current = true;
-    lastPredictionTime.current = now;
-
-    try {
-      const result = await apiService.predictVowel(landmarks);
-
-      setAppState(prev => {
-        const confidenceChanged = Math.abs((prev.predictionConfidence || 0) - result.confidence) > 0.05;
-        const predictionChanged = prev.prediction !== result.prediction;
-
-        if (predictionChanged || confidenceChanged) {
-          return {
-            ...prev,
-            prediction: result.prediction,
-            predictionConfidence: result.confidence
-          };
-        }
-
-        return prev;
-      });
-    } catch (error) {
-      console.error('Error en la predicción:', error);
-      let errorMessage = STATUS_MESSAGES.PREDICTION_ERROR;
-      if (error.response?.data?.detail) {
-        const detail = error.response.data.detail;
-        if (detail.includes('Modelo no entrenado')) {
-          errorMessage = STATUS_MESSAGES.PREDICTION_ERROR_NO_MODEL;
-        } else {
-          errorMessage = `Error: ${detail}`;
-        }
+      const now = Date.now();
+      if (now - lastPredictionTime.current < PREDICTION_THROTTLE_MS) {
+        return;
       }
 
-      setAppState(prev => ({ ...prev, isPredicting: false, statusMessage: errorMessage }));
-    } finally {
-      predictionInProgress.current = false;
-    }
-  }, [appState.isPredicting]);
+      predictionInProgress.current = true;
+      lastPredictionTime.current = now;
+
+      try {
+        const res = await fetch(`${API_URL}/api/predict`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ puntos_clave: landmarks }),
+        });
+        const result = await res.json();
+
+        setAppState((prev) => {
+          const confidenceChanged =
+            Math.abs((prev.predictionConfidence || 0) - result.confianza) > 0.05;
+          const predictionChanged = prev.prediction !== result.prediccion;
+
+          if (predictionChanged || confidenceChanged) {
+            return {
+              ...prev,
+              prediction: result.prediccion,
+              predictionConfidence: result.confianza,
+            };
+          }
+
+          return prev;
+        });
+      } catch (error) {
+        console.error("Error en la predicción:", error);
+        setAppState((prev) => ({
+          ...prev,
+          isPredicting: false,
+          statusMessage: STATUS_MESSAGES.PREDICTION_ERROR,
+        }));
+      } finally {
+        predictionInProgress.current = false;
+      }
+    },
+    [appState.isPredicting]
+  );
 
   // --- Funciones auxiliares ---
   const canTrainMinimal = useCallback(() => {
     const { vowelProgress } = appState;
-    return VOWELS.every(v => (vowelProgress[v]?.count || 0) >= 2);
+    return VOWELS.every((v) => (vowelProgress[v]?.count || 0) >= 2);
   }, [appState.vowelProgress]);
 
   const getInsufficientVowels = useCallback(() => {
     const { vowelProgress } = appState;
-    return VOWELS.filter(v => (vowelProgress[v]?.count || 0) < 2);
+    return VOWELS.filter((v) => (vowelProgress[v]?.count || 0) < 2);
   }, [appState.vowelProgress]);
 
   // --- Funciones de control ---
-  const startCollecting = useCallback((vowel) => {
-    if (appState.isTraining || appState.isPredicting) return;
-    setAppState(prev => ({
-      ...prev,
-      isCollecting: true,
-      currentVowel: vowel,
-      statusMessage: STATUS_MESSAGES.COLLECTING(vowel),
-    }));
-  }, [appState.isTraining, appState.isPredicting]);
+  const startCollecting = useCallback(
+    (vowel) => {
+      if (appState.isTraining || appState.isPredicting) return;
+      setAppState((prev) => ({
+        ...prev,
+        isCollecting: true,
+        currentVowel: vowel,
+        statusMessage: STATUS_MESSAGES.COLLECTING(vowel),
+      }));
+    },
+    [appState.isTraining, appState.isPredicting]
+  );
 
   const stopCollecting = useCallback(() => {
-    setAppState(prev => ({
+    setAppState((prev) => ({
       ...prev,
       isCollecting: false,
       currentVowel: null,
@@ -163,104 +195,115 @@ export const useVocalLogic = ({ setModalData }) => {
   const trainModel = useCallback(async () => {
     if (!canTrainMinimal()) {
       const insufficientVowels = getInsufficientVowels();
-      const message = `Faltan datos para: ${insufficientVowels.join(', ')}. Necesitas al menos 2 muestras por vocal.`;
-      setAppState(prev => ({ ...prev, statusMessage: message }));
+      const message = `Faltan datos para: ${insufficientVowels.join(
+        ", "
+      )}. Necesitas al menos 2 muestras por vocal.`;
+      setAppState((prev) => ({ ...prev, statusMessage: message }));
       return;
     }
 
-    setAppState(prev => ({ ...prev, isTraining: true, statusMessage: STATUS_MESSAGES.TRAINING }));
+    setAppState((prev) => ({
+      ...prev,
+      isTraining: true,
+      statusMessage: STATUS_MESSAGES.TRAINING,
+    }));
     try {
-      const result = await apiService.trainModel();
-      setAppState(prev => ({
+      const res = await fetch(`${API_URL}/api/train`, { method: "POST" });
+      const result = await res.json();
+      setAppState((prev) => ({
         ...prev,
         isModelTrained: true,
-        trainingAccuracy: result.accuracy,
-        statusMessage: STATUS_MESSAGES.TRAINING_SUCCESS(result.accuracy),
+        trainingAccuracy: result.precision,
+        statusMessage: STATUS_MESSAGES.TRAINING_SUCCESS(result.precision * 100),
       }));
     } catch (err) {
-      console.error('Error durante el entrenamiento:', err);
-      let errorMessage = STATUS_MESSAGES.TRAINING_ERROR;
-
-      if (err.response?.data?.detail) {
-        const detail = err.response.data.detail;
-        if (detail.includes('Datos insuficientes')) {
-          errorMessage = STATUS_MESSAGES.TRAINING_ERROR_INSUFFICIENT;
-        } else {
-          errorMessage = `Error: ${detail}`;
-        }
-      }
-
-      setAppState(prev => ({ ...prev, statusMessage: errorMessage }));
+      console.error("Error durante el entrenamiento:", err);
+      setAppState((prev) => ({
+        ...prev,
+        statusMessage: STATUS_MESSAGES.TRAINING_ERROR,
+      }));
     } finally {
-      setAppState(prev => ({ ...prev, isTraining: false }));
+      setAppState((prev) => ({ ...prev, isTraining: false }));
     }
   }, [canTrainMinimal, getInsufficientVowels]);
 
   const resetData = useCallback(() => {
     setModalData({
       open: true,
-      message: "¿Estás seguro de que quieres borrar todos los datos y el modelo?",
+      message:
+        "¿Estás seguro de que quieres borrar todos los datos y el modelo?",
       onConfirm: async () => {
         try {
-          await apiService.resetData();
-          setAppState(prev => ({
+          await fetch(`${API_URL}/api/reset`, { method: "POST" });
+          setAppState((prev) => ({
             ...prev,
             isModelTrained: false,
             isPredicting: false,
-            prediction: '',
+            prediction: "",
             predictionConfidence: null,
             trainingAccuracy: null,
             statusMessage: STATUS_MESSAGES.RESET,
             vowelProgress: {},
           }));
         } catch (error) {
-          console.error('Error al reiniciar datos:', error);
+          console.error("Error al reiniciar datos:", error);
         } finally {
           fetchProgress();
         }
-      }
+      },
     });
   }, [fetchProgress, setModalData]);
 
-  const deleteVowelData = useCallback((vowel) => {
-    setModalData({
-      open: true,
-      message: `¿Estás seguro de que quieres borrar todos los datos de la vocal '${vowel}'?`,
-      onConfirm: async () => {
-        try {
-          await apiService.deleteVowelData(vowel);
-          setAppState(prev => ({
-            ...prev,
-            statusMessage: `Datos de la vocal '${vowel}' eliminados correctamente.`,
-          }));
-        } catch (error) {
-          console.error(`Error al eliminar datos de la vocal ${vowel}:`, error);
-        } finally {
-          fetchProgress();
-        }
-      }
-    });
-  }, [fetchProgress, setModalData]);
+  const deleteVowelData = useCallback(
+    (vowel) => {
+      setModalData({
+        open: true,
+        message: `¿Estás seguro de que quieres borrar todos los datos de la vocal '${vowel}'?`,
+        onConfirm: async () => {
+          try {
+            await fetch(`${API_URL}/api/samples/${vowel}`, {
+              method: "DELETE",
+            });
+            setAppState((prev) => ({
+              ...prev,
+              statusMessage: `Datos de la vocal '${vowel}' eliminados correctamente.`,
+            }));
+          } catch (error) {
+            console.error(
+              `Error al eliminar datos de la vocal ${vowel}:`,
+              error
+            );
+          } finally {
+            fetchProgress();
+          }
+        },
+      });
+    },
+    [fetchProgress, setModalData]
+  );
 
-  // ✅ Aquí el cambio
   const togglePrediction = useCallback(() => {
     if (!appState.isModelTrained) {
-      console.warn("Modelo no entrenado. Por favor, entrena el modelo primero.");
+      console.warn(
+        "Modelo no entrenado. Por favor, entrena el modelo primero."
+      );
       return;
     }
-    setAppState(prev => ({
+    setAppState((prev) => ({
       ...prev,
-      isCollecting: false,      // 🚫 detener recolección
-      currentVowel: null,       // 🚫 limpiar vocal en curso
+      isCollecting: false,
+      currentVowel: null,
       isPredicting: !prev.isPredicting,
-      prediction: '',
+      prediction: "",
       predictionConfidence: null,
     }));
   }, [appState.isModelTrained]);
 
   const canTrain = useCallback(() => {
     const { vowelProgress } = appState;
-    return VOWELS.every(v => (vowelProgress[v]?.count || 0) >= SAMPLES_PER_VOWEL);
+    return VOWELS.every(
+      (v) => (vowelProgress[v]?.count || 0) >= SAMPLES_PER_VOWEL
+    );
   }, [appState.vowelProgress]);
 
   const getTotalSamples = useCallback(() => {
@@ -298,6 +341,6 @@ export const useVocalLogic = ({ setModalData }) => {
     getTotalSamples,
     getRequiredSamples,
     VOWELS,
-    SAMPLES_PER_VOWEL
+    SAMPLES_PER_VOWEL,
   };
 };

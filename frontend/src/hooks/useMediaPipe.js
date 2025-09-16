@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
-// Conexiones entre los puntos de la mano
 const HAND_CONNECTIONS = [
   [0, 1], [1, 2], [2, 3], [3, 4],
   [0, 5], [5, 6], [6, 7], [7, 8],
@@ -33,7 +32,6 @@ export const useMediaPipe = ({
     const video = videoRef.current;
     const ctx = canvas.getContext('2d');
 
-    // Ajustar tamaño del canvas al del video
     if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
       canvas.width = video.videoWidth || 640;
       canvas.height = video.videoHeight || 480;
@@ -44,11 +42,9 @@ export const useMediaPipe = ({
 
     if (results.multiHandLandmarks?.length) {
       for (const landmarks of results.multiHandLandmarks) {
-        // Dibujar conexiones y landmarks
         window.drawConnectors(ctx, landmarks, HAND_CONNECTIONS, { color: '#00FF00', lineWidth: 5 });
         window.drawLandmarks(ctx, landmarks, { color: '#FF0000', lineWidth: 2 });
 
-        // ✅ Convertir objetos {x,y,z} → arrays [x,y,z]
         const puntos = landmarks.map(p => [p.x, p.y, p.z]);
 
         if (isCollecting && currentVowel && onLandmarks) {
@@ -63,7 +59,7 @@ export const useMediaPipe = ({
     ctx.restore();
   }, [canvasRef, videoRef, isCollecting, currentVowel, isModelTrained, isPredicting, onLandmarks, onPredict]);
 
-  // useEffect 1: Inicializa la cámara
+  // Inicializar cámara
   useEffect(() => {
     const initializeCamera = async () => {
       try {
@@ -100,7 +96,7 @@ export const useMediaPipe = ({
     };
   }, [videoRef]);
 
-  // useEffect 2: Inicializa MediaPipe
+  // Inicializar Mediapipe
   useEffect(() => {
     const initializeMediaPipe = async () => {
       try {
@@ -119,7 +115,15 @@ export const useMediaPipe = ({
         handsRef.current = hands;
 
         const camera = new window.Camera(videoRef.current, {
-          onFrame: async () => { await hands.send({ image: videoRef.current }); },
+          onFrame: async () => {
+            if (handsRef.current) {
+              try {
+                await handsRef.current.send({ image: videoRef.current });
+              } catch (err) {
+                console.warn("⚠️ Hands cerrado, frame ignorado:", err.message);
+              }
+            }
+          },
           width: 640,
           height: 480
         });
@@ -139,6 +143,8 @@ export const useMediaPipe = ({
     return () => {
       cameraRef.current?.stop();
       handsRef.current?.close();
+      cameraRef.current = null;
+      handsRef.current = null; // 🔑 evita llamadas posteriores
     };
   }, [isCameraReady, onResults, videoRef]);
 
